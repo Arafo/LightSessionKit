@@ -16,5 +16,5 @@ public protocol RequestAdapter {
     ///   - request: The request that will be executed.
     ///   - manager: The manager which will perform the request.
     /// - Returns: The altered request to be executed.
-    func adapt(_ request: URLRequest, for manager: LightSessionManager) -> URLRequest
+    func adapt(_ request: URLRequest, for manager: LightSessionManager) async -> URLRequest
 }

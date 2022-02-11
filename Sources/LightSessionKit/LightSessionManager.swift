@@ -102,11 +102,7 @@ open class LightSessionManager {
     /// - Returns: The response of the request.
     public func get(_ path: String) async throws -> Response {
         try await createRequest(withPath: path, method: .get)
-            .prepare({ request in
-                return self.adapters.reduce(request, { result, adapter in
-                    return adapter.adapt(result, for: self)
-                })
-            })
+            .prepare({ return await self.adapt($0) })
             .fetch(with: session)
     }
     
@@ -120,7 +116,7 @@ open class LightSessionManager {
     /// - Returns: The response of the request.
     public func post<Body: Codable>(_ path: String, body: Body) async throws -> Response {
         try await createRequest(withPath: path, body: body, method: .post)
-            .prepare({ return self.adapt($0) })
+            .prepare({ return await self.adapt($0) })
             .fetch(with: session)
     }
     
@@ -136,20 +132,33 @@ open class LightSessionManager {
         return URL(string: path, relativeTo: baseURL)
     }
     
-    private func adapt(_ request: URLRequest) -> URLRequest {
-        return self.adapters.reduce(request, { result, adapter in
-            return adapter.adapt(result, for: self)
-        })
+    private func adapt(_ request: URLRequest) async -> URLRequest {
+        return await self.adapters.asyncReduce(request) { result, adapter in
+            return await adapter.adapt(result, for: self)
+        }
     }
 }
 
 private extension URLRequest {
-    func prepare(_ transform: @escaping (Self) -> Self) -> Self {
-        return transform(self)
+    func prepare(_ transform: @escaping (Self) async -> Self) async -> Self {
+        return await transform(self)
     }
     
     func fetch(with session: URLSession) async throws -> Response {
         let (data, httpResponse) = try await session.data(for: self)
         return Response(request: self, httpResponse: httpResponse, data: data)
+    }
+}
+
+private extension Sequence {
+    func asyncReduce<Result>(
+        _ initialResult: Result,
+        _ nextPartialResult: ((Result, Element) async throws -> Result)
+    ) async rethrows -> Result {
+        var result = initialResult
+        for element in self {
+            result = try await nextPartialResult(result, element)
+        }
+        return result
     }
 }
